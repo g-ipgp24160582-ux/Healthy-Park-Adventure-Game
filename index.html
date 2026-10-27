@@ -1,0 +1,1396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Healthy Park Adventure 🌳🍎</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Nunito:wght@400;700;800;900&display=swap');
+        
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: manipulation;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Nunito', sans-serif;
+            overflow: hidden;
+            background-color: #86efac; /* Fallback green */
+            margin: 0;
+            padding: 0;
+        }
+
+        h1, h2, h3, h4, h5, .title-font {
+            font-family: 'Fredoka', sans-serif;
+        }
+
+        #game-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: block;
+            z-index: 1;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 10;
+            pointer-events: none; /* Let clicks pass to 3D canvas when no menu is open */
+        }
+
+        .pointer-events-auto { pointer-events: auto; }
+
+        /* Glassmorphism Menus */
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(12px);
+            border: 4px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 20px 40px rgba(15, 23, 42, 0.15), 0 4px 10px rgba(255, 255, 255, 0.6) inset;
+        }
+
+        /* Virtual Joystick */
+        .joystick-zone {
+            position: absolute;
+            bottom: 24px;
+            left: 24px;
+            width: 140px;
+            height: 140px;
+            background: rgba(255, 255, 255, 0.4);
+            border: 4px solid rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            touch-action: none;
+            backdrop-filter: blur(5px);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .joystick-handle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 60px;
+            margin-top: -30px;
+            margin-left: -30px;
+            background: radial-gradient(circle at 30% 30%, #60a5fa 0%, #3b82f6 100%);
+            border: 4px solid #ffffff;
+            border-radius: 50%;
+            box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4), inset 0 2px 4px rgba(255, 255, 255, 0.8);
+            transition: transform 0.05s ease-out;
+        }
+
+        /* Action Button */
+        .action-btn {
+            position: absolute;
+            bottom: 24px;
+            right: 24px;
+            width: 90px;
+            height: 90px;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #facc15 0%, #eab308 100%);
+            border: 5px solid #ffffff;
+            box-shadow: 0 8px 24px rgba(234, 179, 8, 0.4), inset 0 2px 6px rgba(255, 255, 255, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #713f12;
+            font-size: 36px;
+            cursor: pointer;
+            transition: all 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .action-btn:active { transform: scale(0.9); }
+        .action-btn.highlight { animation: pulse-ring 1s infinite alternate; border-color: #fef08a; }
+
+        /* Animations */
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+        }
+        .animate-float { animation: float 3s ease-in-out infinite; }
+        
+        @keyframes pulse-ring {
+            0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+            100% { box-shadow: 0 0 0 15px rgba(250, 204, 21, 0); }
+        }
+
+        .custom-scroll::-webkit-scrollbar { width: 8px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+
+        /* Accessibility Classes */
+        body.text-large { font-size: 115%; }
+        body.text-xlarge { font-size: 130%; }
+        body.reduced-motion * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+
+        .hidden-ui { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- 3D Canvas -->
+    <canvas id="game-canvas"></canvas>
+
+    <!-- UI Overlay Layer -->
+    <div id="ui-layer" class="flex items-center justify-center">
+
+        <!-- 1. MAIN MENU -->
+        <div id="screen-main-menu" class="pointer-events-auto absolute inset-0 bg-emerald-900/40 backdrop-blur-sm flex flex-col items-center justify-center p-4">
+            <div class="glass-panel w-full max-w-2xl rounded-3xl p-6 md:p-10 text-center relative overflow-hidden flex flex-col items-center shadow-2xl">
+                <!-- Decorative background blobs -->
+                <div class="absolute -top-20 -left-20 w-48 h-48 bg-pink-300/40 rounded-full blur-3xl"></div>
+                <div class="absolute -bottom-20 -right-20 w-48 h-48 bg-yellow-300/40 rounded-full blur-3xl"></div>
+                
+                <div class="text-6xl md:text-7xl mb-4 animate-float">🌳🍎</div>
+                <h1 class="title-font text-4xl md:text-5xl font-black text-emerald-600 mb-2 drop-shadow-sm">Healthy Park Adventure</h1>
+                <p class="text-slate-600 font-bold mb-8 text-sm md:text-lg">The Great Healthy Food Quest • Primary Year 4</p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full max-w-lg mb-6">
+                    <button onclick="startGameMode('3d')" class="col-span-1 sm:col-span-2 bg-gradient-to-b from-emerald-400 to-emerald-600 text-white font-black text-xl md:text-2xl py-5 rounded-2xl shadow-xl border-4 border-emerald-300 hover:brightness-110 active:scale-95 transition-transform flex items-center justify-center gap-3">
+                        <span>🚶‍♂️ Play 3D Adventure</span>
+                    </button>
+                    
+                    <button onclick="showScreen('quick-access')" class="bg-gradient-to-b from-purple-400 to-purple-600 text-white font-black text-lg py-4 rounded-2xl shadow-lg border-4 border-purple-300 hover:brightness-110 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                        <span>⚡ Quick Access</span>
+                    </button>
+
+                    <button onclick="showScreen('progress')" class="bg-gradient-to-b from-amber-400 to-orange-500 text-white font-black text-lg py-4 rounded-2xl shadow-lg border-4 border-amber-300 hover:brightness-110 active:scale-95 transition-transform flex items-center justify-center gap-2">
+                        <span>🏆 My Progress</span>
+                    </button>
+                </div>
+
+                <div class="flex gap-4">
+                    <button onclick="showScreen('settings')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl border-2 border-slate-300 transition-colors flex items-center gap-2 text-sm">
+                        ⚙️ Accessibility
+                    </button>
+                    <button onclick="showScreen('how-to-play')" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 px-4 rounded-xl border-2 border-slate-300 transition-colors flex items-center gap-2 text-sm">
+                        ❓ How to Play
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. HUD (Visible during 3D gameplay) -->
+        <div id="screen-hud" class="pointer-events-auto absolute inset-0 hidden-ui">
+            <!-- Top Bar -->
+            <div class="absolute top-4 left-4 right-4 flex justify-between items-start pointer-events-none">
+                <!-- Character & Location -->
+                <div class="glass-panel px-4 py-2 rounded-2xl flex items-center gap-3 pointer-events-auto shadow-md border-2 border-white/80 bg-white/80">
+                    <div class="w-12 h-12 rounded-full bg-orange-100 border-2 border-orange-300 flex justify-center items-center text-3xl">
+                        🐻
+                    </div>
+                    <div>
+                        <div class="text-[10px] md:text-xs font-black text-emerald-600 uppercase tracking-wider title-font">Healthy Park</div>
+                        <div id="hud-location-name" class="text-sm md:text-base font-extrabold text-slate-800">Sunny Entrance</div>
+                    </div>
+                </div>
+
+                <!-- Global Controls -->
+                <div class="flex flex-col gap-2 pointer-events-auto">
+                    <button onclick="returnToMainMenu()" class="w-12 h-12 bg-rose-500 hover:bg-rose-600 text-white rounded-full shadow-lg border-2 border-rose-300 flex justify-center items-center text-xl transition-transform active:scale-95">
+                        ✖️
+                    </button>
+                    <button onclick="showScreen('progress')" class="w-12 h-12 bg-amber-400 hover:bg-amber-500 text-white rounded-full shadow-lg border-2 border-amber-200 flex justify-center items-center text-xl transition-transform active:scale-95">
+                        ⭐
+                    </button>
+                </div>
+            </div>
+
+            <!-- Joystick & Action Button -->
+            <div id="joystick-container" class="joystick-zone pointer-events-auto">
+                <div id="joystick-knob" class="joystick-handle"></div>
+            </div>
+            <button id="action-btn" class="action-btn pointer-events-auto" onclick="triggerInteraction()">
+                👆
+            </button>
+        </div>
+
+        <!-- 3. QUICK ACCESS & LEVEL MENU -->
+        <div id="screen-quick-access" class="pointer-events-auto absolute inset-0 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center p-4 hidden-ui">
+            <div class="glass-panel w-full max-w-4xl h-[85vh] rounded-3xl p-6 flex flex-col shadow-2xl">
+                <div class="flex justify-between items-center mb-4 shrink-0">
+                    <h2 class="title-font text-2xl md:text-3xl font-black text-purple-700">⚡ Choose a Challenge</h2>
+                    <button onclick="returnToMainMenu()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold p-2 rounded-full w-10 h-10 flex items-center justify-center transition-colors">✕</button>
+                </div>
+                
+                <p class="text-slate-600 font-bold mb-4 text-sm md:text-base shrink-0">Play any level independently. You don't need to walk in the park to complete these!</p>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 overflow-y-auto custom-scroll p-2 flex-1" id="level-cards-container">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. PROGRESS & REWARDS DASHBOARD -->
+        <div id="screen-progress" class="pointer-events-auto absolute inset-0 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center p-4 hidden-ui">
+             <div class="glass-panel w-full max-w-2xl h-[85vh] rounded-3xl p-6 flex flex-col shadow-2xl">
+                <div class="flex justify-between items-center mb-4 shrink-0">
+                    <h2 class="title-font text-2xl md:text-3xl font-black text-amber-600">🏆 My Progress</h2>
+                    <button onclick="closeOverlayMenu()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold p-2 rounded-full w-10 h-10 flex items-center justify-center transition-colors">✕</button>
+                </div>
+
+                <div class="overflow-y-auto custom-scroll pr-2 space-y-6 flex-1">
+                    <!-- Summary Stats -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gradient-to-br from-amber-100 to-orange-100 border-2 border-amber-300 rounded-2xl p-4 text-center">
+                            <div class="text-3xl mb-1">⭐</div>
+                            <div class="text-xs font-black text-amber-800 uppercase tracking-wide">Total Stars</div>
+                            <div id="prog-total-stars" class="text-2xl font-black text-slate-800">0</div>
+                        </div>
+                        <div class="bg-gradient-to-br from-emerald-100 to-teal-100 border-2 border-emerald-300 rounded-2xl p-4 text-center">
+                            <div class="text-3xl mb-1">🎯</div>
+                            <div class="text-xs font-black text-emerald-800 uppercase tracking-wide">Correct Answers</div>
+                            <div id="prog-total-questions" class="text-2xl font-black text-slate-800">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Level Breakdown -->
+                    <div>
+                        <h3 class="title-font text-lg font-black text-slate-700 mb-3">Level Mastery</h3>
+                        <div id="prog-level-list" class="space-y-3">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
+                    <!-- Badges -->
+                    <div>
+                         <h3 class="title-font text-lg font-black text-slate-700 mb-3">Ranger Badges</h3>
+                         <div class="grid grid-cols-4 gap-3 text-center" id="badges-container">
+                             <!-- Populated by JS -->
+                         </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. ACCESSIBILITY SETTINGS -->
+        <div id="screen-settings" class="pointer-events-auto absolute inset-0 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center p-4 hidden-ui">
+             <div class="glass-panel w-full max-w-md rounded-3xl p-6 flex flex-col shadow-2xl">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="title-font text-2xl font-black text-slate-800">⚙️ Accessibility</h2>
+                    <button onclick="returnToMainMenu()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold p-2 rounded-full w-10 h-10 flex items-center justify-center transition-colors">✕</button>
+                </div>
+
+                <div class="space-y-5">
+                    <!-- Text Size -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                        <label class="block font-black text-slate-700 mb-2">Text Size</label>
+                        <div class="flex gap-2">
+                            <button onclick="setAccessibility('text', 'normal')" id="btn-txt-normal" class="flex-1 py-2 rounded-lg bg-emerald-500 text-white font-bold border-2 border-emerald-600">Normal</button>
+                            <button onclick="setAccessibility('text', 'large')" id="btn-txt-large" class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-700 font-bold border-2 border-slate-300">Large</button>
+                            <button onclick="setAccessibility('text', 'xlarge')" id="btn-txt-xlarge" class="flex-1 py-2 rounded-lg bg-slate-200 text-slate-700 font-bold border-2 border-slate-300">Extra</button>
+                        </div>
+                    </div>
+
+                    <!-- Audio -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
+                        <span class="font-black text-slate-700">Sound Effects & Voice</span>
+                        <button onclick="toggleAccessibility('sound')" id="btn-sound" class="w-16 py-1.5 rounded-full bg-emerald-500 text-white font-bold border-2 border-emerald-600 transition-colors">ON</button>
+                    </div>
+
+                    <!-- Reduced Motion -->
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 flex justify-between items-center">
+                        <div>
+                            <span class="block font-black text-slate-700">Reduced Motion</span>
+                            <span class="text-xs text-slate-500 font-bold">Stops bouncing animations</span>
+                        </div>
+                        <button onclick="toggleAccessibility('motion')" id="btn-motion" class="w-16 py-1.5 rounded-full bg-slate-200 text-slate-700 font-bold border-2 border-slate-300 transition-colors">OFF</button>
+                    </div>
+                </div>
+
+                <button onclick="returnToMainMenu()" class="mt-6 w-full bg-slate-800 hover:bg-slate-900 text-white font-black py-4 rounded-xl transition-colors">Save Settings</button>
+            </div>
+        </div>
+
+        <!-- 6. HOW TO PLAY -->
+        <div id="screen-how-to-play" class="pointer-events-auto absolute inset-0 bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center p-4 hidden-ui">
+             <div class="glass-panel w-full max-w-lg rounded-3xl p-6 shadow-2xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="title-font text-2xl font-black text-sky-600">❓ How to Play</h2>
+                    <button onclick="returnToMainMenu()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold p-2 rounded-full w-10 h-10 flex items-center justify-center transition-colors">✕</button>
+                </div>
+                
+                <div class="space-y-4 text-slate-700 font-bold text-sm md:text-base">
+                    <div class="flex gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="text-3xl">🕹️</div>
+                        <div><strong class="text-slate-900 block">Mobile:</strong> Use the joystick on the left to move. Tap the yellow button to interact.</div>
+                    </div>
+                    <div class="flex gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="text-3xl">⌨️</div>
+                        <div><strong class="text-slate-900 block">Computer:</strong> Use W, A, S, D or Arrow Keys to move. Click objects to interact.</div>
+                    </div>
+                    <div class="flex gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="text-3xl">⚡</div>
+                        <div><strong class="text-slate-900 block">No 3D needed:</strong> Use "Quick Access" from the main menu to play the learning levels directly.</div>
+                    </div>
+                    <div class="flex gap-4 items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div class="text-3xl">⭐</div>
+                        <div><strong class="text-slate-900 block">Scoring:</strong> Don't worry about mistakes! Try again without losing points. Earn up to 3 stars per level.</div>
+                    </div>
+                </div>
+                <button onclick="returnToMainMenu()" class="mt-6 w-full bg-sky-500 hover:bg-sky-600 text-white font-black py-4 rounded-xl transition-colors">Got it!</button>
+             </div>
+        </div>
+
+        <!-- 7. QUIZ / INTERACTION MODAL -->
+        <div id="screen-quiz" class="pointer-events-auto absolute inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 hidden-ui">
+             <div class="glass-panel w-full max-w-3xl max-h-[90vh] rounded-3xl flex flex-col shadow-2xl overflow-hidden animate-float" style="animation-duration: 4s;">
+                
+                <!-- Header: NPC & Title -->
+                <div class="bg-gradient-to-r from-emerald-100 to-teal-100 p-4 border-b-2 border-white flex items-center gap-4 shrink-0 relative">
+                    <button onclick="closeQuizMode()" class="absolute top-4 right-4 bg-white/50 hover:bg-white text-slate-700 font-bold w-8 h-8 rounded-full flex items-center justify-center transition-colors">✕</button>
+                    <div id="quiz-npc-icon" class="w-16 h-16 rounded-full bg-white border-4 border-emerald-300 flex justify-center items-center text-4xl shadow-md">
+                        🐰
+                    </div>
+                    <div>
+                        <h3 id="quiz-npc-name" class="title-font text-lg font-black text-emerald-800">Bunny</h3>
+                        <p id="quiz-level-title" class="text-sm font-bold text-slate-600 uppercase tracking-wide">Level 1: Fruit Explorer</p>
+                    </div>
+                </div>
+
+                <!-- Main Content Area -->
+                <div class="p-6 overflow-y-auto custom-scroll flex-1 flex flex-col">
+                    
+                    <!-- Reading Passage (Optional) -->
+                    <div id="quiz-reading-container" class="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-6 hidden-ui">
+                        <h4 class="title-font text-amber-800 font-black mb-2 flex items-center gap-2">📖 Read the story:</h4>
+                        <p id="quiz-reading-text" class="text-slate-800 font-bold text-sm md:text-base leading-relaxed"></p>
+                    </div>
+
+                    <!-- Question & Feedback -->
+                    <div class="mb-6 flex-1 flex flex-col justify-center">
+                        <div class="flex justify-between items-end mb-2">
+                            <h2 id="quiz-question-text" class="title-font text-xl md:text-2xl font-black text-slate-800">Question goes here?</h2>
+                            <button onclick="speakText(document.getElementById('quiz-question-text').innerText)" class="bg-purple-100 text-purple-700 hover:bg-purple-200 p-2 rounded-full w-10 h-10 flex justify-center items-center transition-colors shadow-sm" aria-label="Listen to question" title="Listen">🔊</button>
+                        </div>
+                        
+                        <div id="quiz-feedback-box" class="min-h-[40px] rounded-xl p-3 mb-4 font-bold text-sm flex items-center justify-center text-center transition-all opacity-0">
+                            <!-- Feedback injected here -->
+                        </div>
+
+                        <!-- Answer Options -->
+                        <div id="quiz-options-container" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <!-- Buttons injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Footer Progress -->
+                <div class="bg-slate-50 p-4 border-t-2 border-slate-200 flex justify-between items-center shrink-0">
+                    <div class="font-black text-slate-500 text-sm">
+                        Question <span id="quiz-progress-current">1</span> of <span id="quiz-progress-total">5</span>
+                    </div>
+                    <button id="quiz-next-btn" onclick="nextQuizQuestion()" class="bg-emerald-500 hover:bg-emerald-600 text-white font-black py-2.5 px-6 rounded-xl transition-colors hidden-ui">
+                        Next ➡️
+                    </button>
+                </div>
+             </div>
+        </div>
+
+        <!-- 8. LEVEL COMPLETE CELEBRATION -->
+        <div id="screen-level-complete" class="pointer-events-auto absolute inset-0 bg-emerald-950/80 backdrop-blur-md flex items-center justify-center p-4 hidden-ui">
+             <div class="glass-panel w-full max-w-lg rounded-3xl p-8 text-center shadow-2xl relative overflow-hidden">
+                <div id="confetti-layer" class="absolute inset-0 pointer-events-none opacity-50 text-2xl">
+                    <!-- CSS confetti could go here -->
+                </div>
+                
+                <div class="text-6xl mb-4 animate-bounce">🎉</div>
+                <h2 class="title-font text-3xl font-black text-emerald-600 mb-2">Level Complete!</h2>
+                <p id="lc-title" class="text-slate-600 font-bold mb-6">Fruit and Vegetable Explorer</p>
+                
+                <div class="bg-gradient-to-b from-amber-50 to-orange-100 border-4 border-amber-300 rounded-2xl p-6 mb-6 inline-block w-full">
+                    <div class="text-sm font-black text-amber-800 uppercase tracking-wide mb-2">Stars Earned</div>
+                    <div id="lc-stars-container" class="text-5xl flex justify-center gap-2 drop-shadow-md">
+                        ⭐ ⭐ ⭐
+                    </div>
+                    <div class="text-sm font-bold text-slate-700 mt-4">
+                        You answered <span id="lc-correct-count" class="font-black text-emerald-700 text-lg">5</span> unique questions correctly!
+                    </div>
+                </div>
+
+                <div class="flex flex-col sm:flex-row gap-3">
+                    <button onclick="closeQuizMode()" class="flex-1 bg-slate-200 hover:bg-slate-300 text-slate-800 font-black py-4 rounded-xl transition-colors border-2 border-slate-300">
+                        Back to Menu
+                    </button>
+                    <button onclick="playNextLevel()" id="lc-next-btn" class="flex-1 bg-gradient-to-r from-emerald-400 to-teal-500 hover:brightness-110 text-white font-black py-4 rounded-xl transition-all shadow-lg border-2 border-white">
+                        Next Level ➡️
+                    </button>
+                </div>
+             </div>
+        </div>
+
+    </div>
+
+    <!-- MAIN JAVASCRIPT GAME ENGINE -->
+    <script>
+        /**
+         * 1. GAME DATA & CURRICULUM (Primary Year 4 ESL)
+         * Focus: Food vocab, healthy choices, short reading passages.
+         */
+        const GAME_DATA = {
+            levels: [
+                {
+                    id: 1,
+                    title: "Fruit and Vegetable Explorer 🍎",
+                    objective: "Learn basic food vocabulary.",
+                    npcIcon: "🐰",
+                    npcName: "Bunny",
+                    themeColor: "from-pink-100 to-rose-100",
+                    questions: [
+                        { id: "L1Q1", text: "Which food is yellow and long?", options: ["Banana", "Carrot", "Apple"], answer: 0, hint: "Monkeys love this sweet fruit!" },
+                        { id: "L1Q2", text: "Which of these is a vegetable?", options: ["Strawberry", "Broccoli", "Orange"], answer: 1, hint: "It looks like a little green tree." },
+                        { id: "L1Q3", text: "I am round, red, and juicy. What am I?", options: ["Tomato", "Banana", "Spinach"], answer: 0, hint: "We use it to make ketchup and salads!" },
+                        { id: "L1Q4", text: "Rabbits love to eat this crunchy, orange vegetable.", options: ["Apple", "Egg", "Carrot"], answer: 2, hint: "It grows under the ground." },
+                        { id: "L1Q5", text: "Which fruit is named after its colour?", options: ["Grape", "Orange", "Mango"], answer: 1, hint: "It shares a name with a bright colour." }
+                    ]
+                },
+                {
+                    id: 2,
+                    title: "Squeaky’s Healthy Choices 🥕",
+                    objective: "Identify healthy habits and foods.",
+                    npcIcon: "🐿️",
+                    npcName: "Squeaky the Squirrel",
+                    themeColor: "from-orange-100 to-amber-100",
+                    questions: [
+                        { id: "L2Q1", text: "Ali is thirsty after playing. What is the healthiest drink?", options: ["Water", "Fizzy cola", "Sweet tea"], answer: 0, hint: "It has no sugar and comes from the tap or a bottle." },
+                        { id: "L2Q2", text: "What should you do before eating fresh fruit?", options: ["Cook it in oil", "Wash it with clean water", "Put salt on it"], answer: 1, hint: "We need to clean dirt off the skin." },
+                        { id: "L2Q3", text: "Which is a healthy snack for school?", options: ["An apple", "A bag of candy", "A chocolate bar"], answer: 0, hint: "Fruits give you good, natural energy." },
+                        { id: "L2Q4", text: "Milk and cheese help to build strong...", options: ["Hair", "Shoes", "Bones and teeth"], answer: 2, hint: "They are part of your skeleton." },
+                        { id: "L2Q5", text: "To stay healthy, we should eat...", options: ["Only sweets", "A variety of foods", "Just one type of food"], answer: 1, hint: "Our bodies need many different vitamins." }
+                    ]
+                },
+                {
+                    id: 3,
+                    title: "Mimi’s Picnic Mission 🧺",
+                    objective: "Read a short message and answer questions.",
+                    npcIcon: "🐱",
+                    npcName: "Mimi the Kitten",
+                    themeColor: "from-purple-100 to-indigo-100",
+                    readingPassage: "Mimi is having a picnic with her friends in the park. She packs a red apple, a chicken sandwich, and a big bottle of water. She washes the apple carefully before eating it. Her friends are very excited to share the delicious food together on the green grass.",
+                    questions: [
+                        { id: "L3Q1", text: "Where is Mimi having her picnic?", options: ["In the school", "In the park", "In the house"], answer: 1, hint: "Read the first sentence carefully." },
+                        { id: "L3Q2", text: "What fruit does Mimi pack?", options: ["A green pear", "A yellow banana", "A red apple"], answer: 2, hint: "Look at the second sentence describing the food." },
+                        { id: "L3Q3", text: "What does Mimi do to the apple before eating?", options: ["Washes it", "Cuts it", "Cooks it"], answer: 0, hint: "Read the sentence starting with 'She...'." },
+                        { id: "L3Q4", text: "What drink does Mimi bring?", options: ["Orange juice", "Water", "Milk"], answer: 1, hint: "Look at what is in the big bottle." },
+                        { id: "L3Q5", text: "How do her friends feel about the picnic?", options: ["Sad", "Angry", "Excited"], answer: 2, hint: "Look at the last sentence of the story." }
+                    ]
+                },
+                {
+                    id: 4,
+                    title: "The Healthy Food Festival 🎉",
+                    objective: "Apply vocabulary and comprehension skills.",
+                    npcIcon: "🦊",
+                    npcName: "Pippin the Fox",
+                    themeColor: "from-teal-100 to-emerald-100",
+                    readingPassage: "Welcome to our Healthy Food Festival! The children bring bananas, sandwiches, and fresh water. They always wash their hands with soap before eating. Everyone shares the food and enjoys the sunny picnic together. It is a wonderful day!",
+                    questions: [
+                        { id: "L4Q1", text: "What event are the children attending?", options: ["A math test", "A Healthy Food Festival", "A sports day"], answer: 1, hint: "Read the welcome message." },
+                        { id: "L4Q2", text: "Name one food they bring.", options: ["Bananas", "Cake", "Ice cream"], answer: 0, hint: "Look at the second sentence." },
+                        { id: "L4Q3", text: "What do they do before eating?", options: ["Sing a song", "Wash their hands", "Run around"], answer: 1, hint: "It is important for hygiene!" },
+                        { id: "L4Q4", text: "What do they wash their hands with?", options: ["Only water", "Soap", "Juice"], answer: 1, hint: "Read the third sentence carefully." },
+                        { id: "L4Q5", text: "How do the children enjoy the picnic?", options: ["They share the food", "They eat alone", "They sleep"], answer: 0, hint: "Look at the sentence about everyone." }
+                    ]
+                }
+            ]
+        };
+
+        /**
+         * 2. STATE MANAGEMENT
+         */
+        const AppState = {
+            mode: 'menu', // 'menu', '3d', 'quick-access'
+            currentLevelId: null,
+            currentQuestionIdx: 0,
+            sessionAnswersCorrect: 0, // In current level attempt
+            
+            // Persistent Progress (Uses in-memory fallback if localStorage fails)
+            progress: {
+                completedQuestionIds: [], // Array of string IDs
+                levelStars: { 1: 0, 2: 0, 3: 0, 4: 0 },
+                badges: [] // Array of string names
+            },
+            
+            // Accessibility Settings
+            settings: {
+                textSize: 'normal',
+                sound: true,
+                motion: false // false = normal motion, true = reduced motion
+            }
+        };
+
+        // Initialize progress from localStorage if available
+        try {
+            const saved = localStorage.getItem('HealthyParkProgress');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                if(parsed.completedQuestionIds) AppState.progress = parsed;
+            }
+            const savedSettings = localStorage.getItem('HealthyParkSettings');
+            if (savedSettings) {
+                AppState.settings = JSON.parse(savedSettings);
+                applyAccessibilitySettings();
+            }
+        } catch(e) { console.warn("Storage unavailable, using in-memory state."); }
+
+        function saveProgress() {
+            try { localStorage.setItem('HealthyParkProgress', JSON.stringify(AppState.progress)); } catch(e){}
+            updateProgressDashboard();
+        }
+        function saveSettings() {
+            try { localStorage.setItem('HealthyParkSettings', JSON.stringify(AppState.settings)); } catch(e){}
+        }
+
+        /**
+         * 3. AUDIO SYSTEM
+         */
+        const AudioCtx = window.AudioContext || window.webkitAudioContext ? new (window.AudioContext || window.webkitAudioContext)() : null;
+        
+        function playSound(type) {
+            if (!AppState.settings.sound || !AudioCtx) return;
+            try {
+                if (AudioCtx.state === 'suspended') AudioCtx.resume();
+                const osc = AudioCtx.createOscillator();
+                const gain = AudioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(AudioCtx.destination);
+                const now = AudioCtx.currentTime;
+
+                if (type === 'pop') { // UI click
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(400, now);
+                    osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
+                    osc.start(now); osc.stop(now + 0.1);
+                } else if (type === 'success') { // Correct answer
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(523.25, now); // C5
+                    osc.frequency.setValueAtTime(659.25, now + 0.1); // E5
+                    osc.frequency.setValueAtTime(783.99, now + 0.2); // G5
+                    gain.gain.setValueAtTime(0.2, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.4);
+                    osc.start(now); osc.stop(now + 0.4);
+                } else if (type === 'error') { // Wrong answer hint
+                    osc.type = 'square';
+                    osc.frequency.setValueAtTime(300, now);
+                    osc.frequency.exponentialRampToValueAtTime(250, now + 0.2);
+                    gain.gain.setValueAtTime(0.1, now);
+                    gain.gain.linearRampToValueAtTime(0.01, now + 0.2);
+                    osc.start(now); osc.stop(now + 0.2);
+                }
+            } catch(e) {}
+        }
+
+        function speakText(text) {
+            if (!AppState.settings.sound || !('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'en-GB'; // British English is closer to Malaysian ESL models
+            utterance.rate = 0.9; // Slightly slower for comprehension
+            window.speechSynthesis.speak(utterance);
+        }
+
+        /**
+         * 4. UI NAVIGATION LOGIC
+         */
+        function hideAllScreens() {
+            document.querySelectorAll('#ui-layer > div').forEach(el => el.classList.add('hidden-ui'));
+            // Reset background if returning to 3D
+            document.getElementById('ui-layer').classList.remove('bg-emerald-900/40');
+            document.getElementById('ui-layer').style.pointerEvents = 'none'; // Let clicks pass
+        }
+
+        function showScreen(id) {
+            hideAllScreens();
+            document.getElementById(`screen-${id}`).classList.remove('hidden-ui');
+            document.getElementById('ui-layer').style.pointerEvents = 'auto'; // Block clicks
+            playSound('pop');
+            
+            if(id === 'quick-access') populateQuickAccess();
+            if(id === 'progress') updateProgressDashboard();
+            if(id === 'settings') renderSettingsUI();
+        }
+
+        function startGameMode(mode) {
+            playSound('success');
+            hideAllScreens();
+            if (mode === '3d') {
+                AppState.mode = '3d';
+                document.getElementById('screen-hud').classList.remove('hidden-ui');
+                // Ensure audio context starts on user interaction
+                if(AudioCtx && AudioCtx.state === 'suspended') AudioCtx.resume();
+                init3D(); // Lazy init 3D
+            }
+        }
+
+        function returnToMainMenu() {
+            playSound('pop');
+            AppState.mode = 'menu';
+            showScreen('main-menu');
+            document.getElementById('ui-layer').classList.add('bg-emerald-900/40');
+        }
+
+        function closeOverlayMenu() {
+            playSound('pop');
+            if (AppState.mode === '3d') {
+                hideAllScreens();
+                document.getElementById('screen-hud').classList.remove('hidden-ui');
+            } else {
+                returnToMainMenu();
+            }
+        }
+
+        /**
+         * 5. ACCESSIBILITY LOGIC
+         */
+        function applyAccessibilitySettings() {
+            const b = document.body;
+            b.classList.remove('text-large', 'text-xlarge', 'reduced-motion');
+            if(AppState.settings.textSize === 'large') b.classList.add('text-large');
+            if(AppState.settings.textSize === 'xlarge') b.classList.add('text-xlarge');
+            if(AppState.settings.motion) b.classList.add('reduced-motion');
+        }
+
+        function setAccessibility(type, val) {
+            playSound('pop');
+            if (type === 'text') AppState.settings.textSize = val;
+            saveSettings();
+            applyAccessibilitySettings();
+            renderSettingsUI();
+        }
+
+        function toggleAccessibility(type) {
+            playSound('pop');
+            if (type === 'sound') AppState.settings.sound = !AppState.settings.sound;
+            if (type === 'motion') AppState.settings.motion = !AppState.settings.motion;
+            saveSettings();
+            applyAccessibilitySettings();
+            renderSettingsUI();
+        }
+
+        function renderSettingsUI() {
+            // Text buttons
+            ['normal', 'large', 'xlarge'].forEach(sz => {
+                const btn = document.getElementById(`btn-txt-${sz}`);
+                if(AppState.settings.textSize === sz) {
+                    btn.className = "flex-1 py-2 rounded-lg bg-emerald-500 text-white font-bold border-2 border-emerald-600";
+                } else {
+                    btn.className = "flex-1 py-2 rounded-lg bg-slate-200 text-slate-700 font-bold border-2 border-slate-300";
+                }
+            });
+            // Toggles
+            const sBtn = document.getElementById('btn-sound');
+            sBtn.innerText = AppState.settings.sound ? "ON" : "OFF";
+            sBtn.className = AppState.settings.sound ? "w-16 py-1.5 rounded-full bg-emerald-500 text-white font-bold border-2 border-emerald-600" : "w-16 py-1.5 rounded-full bg-slate-200 text-slate-700 font-bold border-2 border-slate-300";
+            
+            const mBtn = document.getElementById('btn-motion');
+            mBtn.innerText = AppState.settings.motion ? "ON" : "OFF";
+            mBtn.className = AppState.settings.motion ? "w-16 py-1.5 rounded-full bg-emerald-500 text-white font-bold border-2 border-emerald-600" : "w-16 py-1.5 rounded-full bg-slate-200 text-slate-700 font-bold border-2 border-slate-300";
+        }
+
+        /**
+         * 6. PROGRESS & QUICK ACCESS DYNAMIC UI
+         */
+        function populateQuickAccess() {
+            const container = document.getElementById('level-cards-container');
+            container.innerHTML = '';
+            
+            GAME_DATA.levels.forEach(level => {
+                const stars = AppState.progress.levelStars[level.id] || 0;
+                const starStr = '⭐'.repeat(stars) + '⬛'.repeat(3-stars).replace(/⬛/g, '<span class="opacity-30">⭐</span>');
+                
+                const card = document.createElement('div');
+                card.className = `bg-gradient-to-br ${level.themeColor} border-2 border-white rounded-2xl p-4 flex flex-col justify-between shadow-md transition-transform hover:scale-105 active:scale-95 cursor-pointer`;
+                card.onclick = () => startLevel(level.id);
+                card.innerHTML = `
+                    <div>
+                        <div class="flex justify-between items-start mb-2">
+                            <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-2xl border-2 border-slate-200 shadow-sm">${level.npcIcon}</div>
+                            <div class="text-sm tracking-widest">${starStr}</div>
+                        </div>
+                        <h3 class="title-font text-lg font-black text-slate-800 leading-tight mb-1">Level ${level.id}: ${level.title}</h3>
+                        <p class="text-xs font-bold text-slate-600">${level.objective}</p>
+                    </div>
+                    <button class="mt-4 w-full bg-slate-800 text-white font-black py-2 rounded-xl text-sm hover:bg-slate-900 transition-colors">Play Now</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function updateProgressDashboard() {
+            document.getElementById('prog-total-stars').innerText = Object.values(AppState.progress.levelStars).reduce((a,b)=>a+b,0);
+            document.getElementById('prog-total-questions').innerText = AppState.progress.completedQuestionIds.length;
+            
+            const list = document.getElementById('prog-level-list');
+            list.innerHTML = '';
+            GAME_DATA.levels.forEach(level => {
+                const stars = AppState.progress.levelStars[level.id] || 0;
+                const starStr = '⭐'.repeat(stars) + '⬛'.repeat(3-stars).replace(/⬛/g, '<span class="opacity-30">⭐</span>');
+                list.innerHTML += `
+                    <div class="flex justify-between items-center bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <span class="font-bold text-slate-700 text-sm md:text-base">Lvl ${level.id}: ${level.title}</span>
+                        <span class="tracking-widest">${starStr}</span>
+                    </div>
+                `;
+            });
+
+            // Badges calculation
+            const badges = [];
+            const totalQ = AppState.progress.completedQuestionIds.length;
+            if(totalQ >= 5) badges.push({icon: '🥉', name: 'Starter Ranger'});
+            if(totalQ >= 10) badges.push({icon: '🥈', name: 'Smart Explorer'});
+            if(totalQ >= 15) badges.push({icon: '🥇', name: 'Picnic Hero'});
+            if(totalQ >= 20) badges.push({icon: '👑', name: 'Health Champion'});
+
+            const bContainer = document.getElementById('badges-container');
+            bContainer.innerHTML = '';
+            if(badges.length === 0) {
+                bContainer.innerHTML = `<div class="col-span-4 text-sm font-bold text-slate-400 py-4">Answer more questions to earn badges!</div>`;
+            } else {
+                badges.forEach(b => {
+                    bContainer.innerHTML += `
+                        <div class="bg-amber-50 border border-amber-200 p-2 rounded-xl flex flex-col items-center">
+                            <span class="text-3xl mb-1">${b.icon}</span>
+                            <span class="text-[10px] font-black text-amber-800 leading-tight">${b.name}</span>
+                        </div>
+                    `;
+                });
+            }
+        }
+
+        /**
+         * 7. CORE QUIZ ENGINE LOGIC
+         */
+        function startLevel(levelId) {
+            playSound('success');
+            hideAllScreens();
+            document.getElementById('screen-quiz').classList.remove('hidden-ui');
+            document.getElementById('ui-layer').style.pointerEvents = 'auto'; // Block 3D clicks
+
+            AppState.currentLevelId = levelId;
+            AppState.currentQuestionIdx = 0;
+            AppState.sessionAnswersCorrect = 0; // Reset session score
+            
+            const level = GAME_DATA.levels.find(l => l.id === levelId);
+            
+            // Set Headers
+            document.getElementById('quiz-npc-icon').innerText = level.npcIcon;
+            document.getElementById('quiz-npc-name').innerText = level.npcName;
+            document.getElementById('quiz-level-title').innerText = `Level ${level.id}: ${level.title}`;
+            
+            // Setup Reading Passage if exists
+            const rdgContainer = document.getElementById('quiz-reading-container');
+            if(level.readingPassage) {
+                rdgContainer.classList.remove('hidden-ui');
+                document.getElementById('quiz-reading-text').innerText = level.readingPassage;
+                speakText(`Read the story. ${level.readingPassage}`);
+            } else {
+                rdgContainer.classList.add('hidden-ui');
+            }
+
+            renderQuestion();
+        }
+
+        function renderQuestion() {
+            const level = GAME_DATA.levels.find(l => l.id === AppState.currentLevelId);
+            const q = level.questions[AppState.currentQuestionIdx];
+            
+            document.getElementById('quiz-progress-current').innerText = AppState.currentQuestionIdx + 1;
+            document.getElementById('quiz-progress-total').innerText = level.questions.length;
+            
+            document.getElementById('quiz-question-text').innerText = q.text;
+            
+            const feedbackBox = document.getElementById('quiz-feedback-box');
+            feedbackBox.className = "min-h-[40px] rounded-xl p-3 mb-4 font-bold text-sm flex items-center justify-center text-center opacity-0";
+            document.getElementById('quiz-next-btn').classList.add('hidden-ui');
+
+            const optionsContainer = document.getElementById('quiz-options-container');
+            optionsContainer.innerHTML = '';
+            
+            q.options.forEach((optText, idx) => {
+                const btn = document.createElement('button');
+                btn.className = "bg-white text-slate-800 font-extrabold p-4 rounded-xl border-4 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50 transition-all text-left shadow-sm active:scale-95";
+                btn.innerText = optText;
+                btn.onclick = () => checkAnswer(idx, btn);
+                optionsContainer.appendChild(btn);
+            });
+            
+            if(!level.readingPassage) speakText(q.text);
+        }
+
+        function checkAnswer(selectedIdx, btnElement) {
+            const level = GAME_DATA.levels.find(l => l.id === AppState.currentLevelId);
+            const q = level.questions[AppState.currentQuestionIdx];
+            const feedbackBox = document.getElementById('quiz-feedback-box');
+            
+            // Disable all buttons temporarily
+            const allBtns = document.getElementById('quiz-options-container').querySelectorAll('button');
+            allBtns.forEach(b => b.disabled = true);
+
+            if (selectedIdx === q.answer) {
+                // Correct!
+                playSound('success');
+                btnElement.classList.remove('border-slate-200', 'hover:border-emerald-400');
+                btnElement.classList.add('border-emerald-500', 'bg-emerald-100', 'text-emerald-900');
+                
+                feedbackBox.innerText = "⭐ Great job! That is correct!";
+                feedbackBox.className = "min-h-[40px] rounded-xl p-3 mb-4 font-black text-sm flex items-center justify-center text-center bg-emerald-100 text-emerald-800 border-2 border-emerald-300 opacity-100 transition-opacity";
+                
+                // Score tracking logic (only unique additions to global, increment session)
+                if (!AppState.progress.completedQuestionIds.includes(q.id)) {
+                    AppState.progress.completedQuestionIds.push(q.id);
+                }
+                AppState.sessionAnswersCorrect++; // Count for this session to determine stars
+                
+                document.getElementById('quiz-next-btn').classList.remove('hidden-ui');
+                speakText("Great job!");
+
+            } else {
+                // Incorrect (No penalty)
+                playSound('error');
+                btnElement.classList.remove('border-slate-200');
+                btnElement.classList.add('border-rose-400', 'bg-rose-50', 'text-rose-900', 'opacity-50');
+                
+                feedbackBox.innerText = `💡 Good try! Hint: ${q.hint}`;
+                feedbackBox.className = "min-h-[40px] rounded-xl p-3 mb-4 font-bold text-sm flex items-center justify-center text-center bg-amber-100 text-amber-900 border-2 border-amber-300 opacity-100 transition-opacity";
+                speakText("Good try. " + q.hint);
+                
+                // Re-enable other buttons so they can try again
+                allBtns.forEach(b => {
+                    if(b !== btnElement) b.disabled = false;
+                });
+            }
+        }
+
+        function nextQuizQuestion() {
+            playSound('pop');
+            const level = GAME_DATA.levels.find(l => l.id === AppState.currentLevelId);
+            if (AppState.currentQuestionIdx < level.questions.length - 1) {
+                AppState.currentQuestionIdx++;
+                renderQuestion();
+            } else {
+                finishLevel();
+            }
+        }
+
+        function finishLevel() {
+            playSound('success');
+            hideAllScreens();
+            
+            const level = GAME_DATA.levels.find(l => l.id === AppState.currentLevelId);
+            const totalQ = level.questions.length;
+            const correct = AppState.sessionAnswersCorrect;
+            
+            // Star calculation: 5/5 = 3 stars, 3-4/5 = 2 stars, 1-2/5 = 1 star
+            let starsEarned = 0;
+            if(correct === totalQ) starsEarned = 3;
+            else if (correct >= Math.ceil(totalQ/2)) starsEarned = 2;
+            else if (correct > 0) starsEarned = 1;
+
+            // Never decrease stars. Only overwrite if higher.
+            if(starsEarned > (AppState.progress.levelStars[level.id] || 0)) {
+                AppState.progress.levelStars[level.id] = starsEarned;
+            }
+            saveProgress();
+
+            document.getElementById('screen-level-complete').classList.remove('hidden-ui');
+            document.getElementById('ui-layer').style.pointerEvents = 'auto';
+
+            document.getElementById('lc-title').innerText = `Level ${level.id}: ${level.title}`;
+            document.getElementById('lc-correct-count').innerText = correct;
+            
+            const starStr = '⭐'.repeat(starsEarned) + '⬛'.repeat(3-starsEarned).replace(/⬛/g, '<span class="opacity-20 text-slate-400">⭐</span>');
+            document.getElementById('lc-stars-container').innerHTML = starStr;
+
+            const nextBtn = document.getElementById('lc-next-btn');
+            if (level.id < 4) {
+                nextBtn.innerText = "Next Level ➡️";
+                nextBtn.onclick = () => startLevel(level.id + 1);
+            } else {
+                nextBtn.innerText = "Celebrate! 🎉";
+                nextBtn.onclick = () => returnToMainMenu(); // End of game loop
+            }
+            speakText(`Level complete! You earned ${starsEarned} stars.`);
+        }
+
+        function closeQuizMode() {
+            if(AppState.mode === '3d') {
+                closeOverlayMenu(); // returns to HUD
+            } else {
+                returnToMainMenu();
+            }
+        }
+
+        function playNextLevel() {
+            const nextId = AppState.currentLevelId + 1;
+            if(nextId <= 4) startLevel(nextId);
+            else returnToMainMenu();
+        }
+
+        /**
+         * 8. THREE.JS 3D ENGINE & WORLD BUILDING
+         * Built entirely with procedural shapes. No external assets.
+         */
+        let scene, camera, renderer;
+        let playerGroup;
+        const keys = { w: false, a: false, s: false, d: false };
+        let joystickVector = { x: 0, y: 0 };
+        let joystickActive = false;
+        let interactables = [];
+        let nearbyNPC = null;
+        let is3DInitialized = false;
+
+        function init3D() {
+            if(is3DInitialized) return; // Only init once
+            is3DInitialized = true;
+            
+            const canvas = document.getElementById('game-canvas');
+            
+            // Provide Graceful degradation check
+            if (!window.THREE) {
+                console.error("Three.js failed to load.");
+                document.getElementById('ui-layer').innerHTML = `
+                    <div class="absolute inset-0 bg-emerald-100 flex flex-col items-center justify-center p-8 text-center">
+                        <h1 class="text-3xl font-black text-emerald-800 mb-4">Oops! Graphics Error</h1>
+                        <p class="mb-4">The 3D park could not load. But you can still play the learning activities!</p>
+                        <button onclick="location.reload()" class="bg-emerald-500 text-white p-3 rounded-lg mb-2">Try Reloading</button>
+                    </div>`;
+                return;
+            }
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xa7f3d0); // Pastel green/blue sky
+            scene.fog = new THREE.FogExp2(0xa7f3d0, 0.015);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+            
+            renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+            // Lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.75);
+            scene.add(ambientLight);
+            const dirLight = new THREE.DirectionalLight(0xfff5b6, 0.8);
+            dirLight.position.set(20, 40, 20);
+            dirLight.castShadow = true;
+            dirLight.shadow.mapSize.width = 1024;
+            dirLight.shadow.mapSize.height = 1024;
+            dirLight.shadow.camera.near = 0.5;
+            dirLight.shadow.camera.far = 100;
+            const d = 40;
+            dirLight.shadow.camera.left = -d; dirLight.shadow.camera.right = d;
+            dirLight.shadow.camera.top = d; dirLight.shadow.camera.bottom = -d;
+            scene.add(dirLight);
+
+            buildWorld();
+            buildPlayer();
+
+            // Controls Setup
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+
+            window.addEventListener('keydown', e => {
+                const k = e.key.toLowerCase();
+                if(keys.hasOwnProperty(k)) keys[k] = true;
+                if(e.key === 'ArrowUp') keys.w = true;
+                if(e.key === 'ArrowDown') keys.s = true;
+                if(e.key === 'ArrowLeft') keys.a = true;
+                if(e.key === 'ArrowRight') keys.d = true;
+            });
+            window.addEventListener('keyup', e => {
+                const k = e.key.toLowerCase();
+                if(keys.hasOwnProperty(k)) keys[k] = false;
+                if(e.key === 'ArrowUp') keys.w = false;
+                if(e.key === 'ArrowDown') keys.s = false;
+                if(e.key === 'ArrowLeft') keys.a = false;
+                if(e.key === 'ArrowRight') keys.d = false;
+            });
+
+            setupJoystick();
+            animate();
+        }
+
+        function buildPlayer() {
+            playerGroup = new THREE.Group();
+            playerGroup.position.set(0, 0, 15); // Start at Entrance
+            
+            // Bear (Benny) Model
+            const matBrown = new THREE.MeshStandardMaterial({ color: 0xa16207, roughness: 0.8 }); // Yellow-brown
+            const matLight = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 0.8 }); // Belly
+            
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.6, 16, 16), matBrown);
+            body.position.y = 0.6;
+            body.castShadow = true;
+            
+            const belly = new THREE.Mesh(new THREE.SphereGeometry(0.45, 16, 16), matLight);
+            belly.position.set(0, 0.55, 0.25);
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), matBrown);
+            head.position.y = 1.4;
+            head.castShadow = true;
+            
+            const earGeo = new THREE.SphereGeometry(0.2, 12, 12);
+            const earL = new THREE.Mesh(earGeo, matBrown); earL.position.set(-0.4, 1.7, 0);
+            const earR = new THREE.Mesh(earGeo, matBrown); earR.position.set(0.4, 1.7, 0);
+            
+            playerGroup.add(body, belly, head, earL, earR);
+            scene.add(playerGroup);
+        }
+
+        function buildWorld() {
+            // Ground
+            const groundGeo = new THREE.PlaneGeometry(120, 120);
+            const groundMat = new THREE.MeshStandardMaterial({ color: 0x86efac, roughness: 0.9 });
+            const ground = new THREE.Mesh(groundGeo, groundMat);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+
+            // Paths
+            const pathMat = new THREE.MeshStandardMaterial({ color: 0xfef08a, roughness: 1.0 }); // Yellow path
+            
+            // Main NS Path
+            const pathNS = new THREE.Mesh(new THREE.PlaneGeometry(4, 60), pathMat);
+            pathNS.rotation.x = -Math.PI / 2;
+            pathNS.position.set(0, 0.02, -10);
+            pathNS.receiveShadow = true;
+            scene.add(pathNS);
+            
+            // Main EW Path
+            const pathEW = new THREE.Mesh(new THREE.PlaneGeometry(50, 4), pathMat);
+            pathEW.rotation.x = -Math.PI / 2;
+            pathEW.position.set(0, 0.02, -10);
+            pathEW.receiveShadow = true;
+            scene.add(pathEW);
+
+            // Zones
+            buildForestRing();
+            
+            // Zone: Entrance (0, 15)
+            // Zone: Gazebo (0, -35)
+            buildGazebo(0, -35);
+            createNPC(-3, -33, 0xf97316, '🦊', 'Pippin', 4, "Gazebo"); // Fox
+
+            // Zone: Fruit Garden (20, -10)
+            buildTrees(20, -10, 0xef4444); // Red trees
+            createNPC(18, -8, 0xfbcfe8, '🐰', 'Bunny', 1, "Fruit Garden"); // Pink Bunny
+            
+            // Zone: Veggie Garden (-20, -10)
+            buildBeds(-20, -10);
+            createNPC(-18, -12, 0xd97706, '🐿️', 'Squeaky', 2, "Veggie Garden"); // Orange Squirrel
+
+            // Zone: Picnic Lawn (-15, 10)
+            buildPicnic(-15, 10);
+            createNPC(-12, 12, 0xc084fc, '🐱', 'Mimi', 3, "Picnic Lawn"); // Purple Kitten
+
+            // Zone: Pond (15, 10)
+            buildPond(15, 10);
+        }
+
+        function buildForestRing() {
+            const trunkMat = new THREE.MeshStandardMaterial({ color: 0x78350f });
+            const leafMat = new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.8 });
+            const geoTrunk = new THREE.CylinderGeometry(0.3, 0.4, 2);
+            const geoLeaf = new THREE.DodecahedronGeometry(1.5);
+
+            for (let i = 0; i < 40; i++) {
+                const angle = (i / 40) * Math.PI * 2;
+                const radius = 35 + Math.random() * 5;
+                const x = Math.cos(angle) * radius;
+                const z = Math.sin(angle) * radius;
+                
+                const group = new THREE.Group();
+                group.position.set(x, 0, z);
+                
+                const trunk = new THREE.Mesh(geoTrunk, trunkMat);
+                trunk.position.y = 1;
+                trunk.castShadow = true;
+                
+                const leaves = new THREE.Mesh(geoLeaf, leafMat);
+                leaves.position.y = 2.5;
+                leaves.castShadow = true;
+                
+                group.add(trunk, leaves);
+                scene.add(group);
+            }
+        }
+
+        function buildTrees(x, z, fruitColor) {
+            const leafMat = new THREE.MeshStandardMaterial({ color: 0x4ade80, roughness: 0.8 });
+            const fruitMat = new THREE.MeshStandardMaterial({ color: fruitColor });
+            
+            for(let i=0; i<3; i++) {
+                const tree = new THREE.Group();
+                tree.position.set(x + (i*4 - 4), 0, z + (Math.random()*4-2));
+                
+                const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.3, 2), new THREE.MeshStandardMaterial({ color: 0x78350f }));
+                trunk.position.y = 1;
+                const leaves = new THREE.Mesh(new THREE.SphereGeometry(1.5, 12, 12), leafMat);
+                leaves.position.y = 2.5;
+                
+                // Add simple fruits
+                for(let j=0; j<4; j++){
+                    const fruit = new THREE.Mesh(new THREE.SphereGeometry(0.2), fruitMat);
+                    fruit.position.set(
+                        (Math.random()-0.5)*2,
+                        2.5 + (Math.random()-0.5)*2,
+                        (Math.random()-0.5)*2
+                    );
+                    tree.add(fruit);
+                }
+                
+                tree.add(trunk, leaves);
+                scene.add(tree);
+            }
+        }
+
+        function buildBeds(x, z) {
+            const dirt = new THREE.MeshStandardMaterial({ color: 0x451a03 });
+            const green = new THREE.MeshStandardMaterial({ color: 0x16a34a });
+            for(let i=0; i<2; i++) {
+                const bed = new THREE.Mesh(new THREE.BoxGeometry(4, 0.2, 2), dirt);
+                bed.position.set(x, 0.1, z + (i*3));
+                
+                // Veggie tops
+                for(let j=0; j<3; j++) {
+                    const top = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.6), green);
+                    top.position.set(x - 1 + j, 0.4, z + (i*3));
+                    scene.add(top);
+                }
+                scene.add(bed);
+            }
+        }
+
+        function buildPicnic(x, z) {
+            const blanket = new THREE.Mesh(new THREE.PlaneGeometry(5, 5), new THREE.MeshStandardMaterial({ color: 0xf43f5e }));
+            blanket.rotation.x = -Math.PI / 2;
+            blanket.position.set(x, 0.05, z);
+            scene.add(blanket);
+            
+            const basket = new THREE.Mesh(new THREE.BoxGeometry(1, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xd97706 }));
+            basket.position.set(x, 0.4, z);
+            scene.add(basket);
+        }
+
+        function buildPond(x, z) {
+            const pond = new THREE.Mesh(new THREE.CircleGeometry(6, 32), new THREE.MeshStandardMaterial({ color: 0x38bdf8, roughness: 0.1 }));
+            pond.rotation.x = -Math.PI / 2;
+            pond.position.set(x, 0.05, z);
+            scene.add(pond);
+            // Duck
+            const duck = new THREE.Mesh(new THREE.SphereGeometry(0.4), new THREE.MeshStandardMaterial({ color: 0xfacc15 }));
+            duck.position.set(x, 0.3, z);
+            scene.add(duck);
+        }
+
+        function buildGazebo(x, z) {
+            const base = new THREE.Mesh(new THREE.CylinderGeometry(5, 5, 0.4, 8), new THREE.MeshStandardMaterial({ color: 0xe2e8f0 }));
+            base.position.set(x, 0.2, z);
+            const roof = new THREE.Mesh(new THREE.ConeGeometry(5.5, 3, 8), new THREE.MeshStandardMaterial({ color: 0xf43f5e }));
+            roof.position.set(x, 4, z);
+            scene.add(base, roof);
+            
+            for(let i=0; i<4; i++) {
+                const angle = (i/4)*Math.PI*2;
+                const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 3), new THREE.MeshStandardMaterial({ color: 0xf8fafc }));
+                pillar.position.set(x + Math.cos(angle)*4, 1.7, z + Math.sin(angle)*4);
+                scene.add(pillar);
+            }
+        }
+
+        function createNPC(x, z, colorHex, icon, name, levelId, locName) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+            
+            const mat = new THREE.MeshStandardMaterial({ color: colorHex, roughness: 0.6 });
+            const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), mat);
+            body.position.y = 0.5;
+            body.castShadow = true;
+            
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), mat);
+            head.position.y = 1.2;
+            head.castShadow = true;
+            
+            // Interaction marker (floating triangle)
+            const marker = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.4, 4), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+            marker.rotation.x = Math.PI; // Point down
+            marker.position.y = 2.2;
+            marker.name = "marker";
+            
+            group.add(body, head, marker);
+            scene.add(group);
+            
+            interactables.push({
+                meshGroup: group,
+                levelId: levelId,
+                name: name,
+                locName: locName
+            });
+        }
+
+        /**
+         * Touch Joystick Logic
+         */
+        function setupJoystick() {
+            const container = document.getElementById('joystick-container');
+            const knob = document.getElementById('joystick-knob');
+            let center = { x: 0, y: 0 };
+            let activeTouch = null;
+
+            container.addEventListener('touchstart', e => {
+                e.preventDefault();
+                const t = e.changedTouches[0];
+                activeTouch = t.identifier;
+                const rect = container.getBoundingClientRect();
+                center = { x: rect.left + rect.width/2, y: rect.top + rect.height/2 };
+                updateJoy(t.clientX, t.clientY);
+            }, {passive: false});
+
+            window.addEventListener('touchmove', e => {
+                if(activeTouch === null) return;
+                for(let i=0; i<e.changedTouches.length; i++) {
+                    if(e.changedTouches[i].identifier === activeTouch) {
+                        updateJoy(e.changedTouches[i].clientX, e.changedTouches[i].clientY);
+                        break;
+                    }
+                }
+            }, {passive: false});
+
+            const resetJoy = () => {
+                activeTouch = null;
+                joystickVector = {x: 0, y: 0};
+                knob.style.transform = `translate(0px, 0px)`;
+                joystickActive = false;
+            };
+            window.addEventListener('touchend', resetJoy);
+            window.addEventListener('touchcancel', resetJoy);
+
+            function updateJoy(cx, cy) {
+                const maxR = 40;
+                let dx = cx - center.x;
+                let dy = cy - center.y;
+                const dist = Math.hypot(dx, dy);
+                if(dist > maxR) {
+                    dx = (dx/dist)*maxR;
+                    dy = (dy/dist)*maxR;
+                }
+                knob.style.transform = `translate(${dx}px, ${dy}px)`;
+                joystickVector = { x: dx/maxR, y: dy/maxR };
+                joystickActive = true;
+            }
+        }
+
+        function triggerInteraction() {
+            if(nearbyNPC) {
+                startLevel(nearbyNPC.levelId);
+            }
+        }
+
+        function animate() {
+            if(AppState.mode !== '3d') {
+                requestAnimationFrame(animate);
+                return; // Pause 3D updates when UI is open
+            }
+            
+            const time = Date.now() * 0.001;
+
+            // Player Movement
+            let mx = 0; let mz = 0;
+            if (joystickActive) {
+                mx = joystickVector.x;
+                mz = joystickVector.y;
+            } else {
+                if(keys.w) mz -= 1;
+                if(keys.s) mz += 1;
+                if(keys.a) mx -= 1;
+                if(keys.d) mx += 1;
+                
+                // Normalize keyboard diagonal
+                if(mx !== 0 && mz !== 0) {
+                    const l = Math.hypot(mx, mz);
+                    mx /= l; mz /= l;
+                }
+            }
+
+            const speed = 0.15;
+            if(Math.abs(mx) > 0.05 || Math.abs(mz) > 0.05) {
+                playerGroup.position.x += mx * speed;
+                playerGroup.position.z += mz * speed;
+                playerGroup.rotation.y = Math.atan2(mx, mz);
+                
+                // Bouncing animation if motion allows
+                if(!AppState.settings.motion) {
+                    playerGroup.position.y = Math.abs(Math.sin(time * 12)) * 0.2;
+                } else {
+                    playerGroup.position.y = 0;
+                }
+            } else {
+                playerGroup.position.y = 0;
+            }
+            
+            // Keep player in bounds
+            playerGroup.position.x = Math.max(-30, Math.min(30, playerGroup.position.x));
+            playerGroup.position.z = Math.max(-40, Math.min(25, playerGroup.position.z));
+
+            // Camera follow
+            camera.position.lerp(new THREE.Vector3(playerGroup.position.x, 8, playerGroup.position.z + 10), 0.1);
+            camera.lookAt(playerGroup.position.x, playerGroup.position.y + 1, playerGroup.position.z);
+
+            // Proximity Check
+            let found = null;
+            interactables.forEach(npc => {
+                // Animate marker
+                if(!AppState.settings.motion) {
+                    const marker = npc.meshGroup.children.find(c => c.name === "marker");
+                    if(marker) {
+                        marker.position.y = 2.2 + Math.sin(time*3)*0.2;
+                        marker.rotation.y += 0.05;
+                    }
+                }
+                
+                if(playerGroup.position.distanceTo(npc.meshGroup.position) < 3.5) {
+                    found = npc;
+                }
+            });
+
+            const actionBtn = document.getElementById('action-btn');
+            const locText = document.getElementById('hud-location-name');
+            
+            if (found !== nearbyNPC) {
+                nearbyNPC = found;
+                if(nearbyNPC) {
+                    actionBtn.classList.add('highlight');
+                    locText.innerText = `Near ${nearbyNPC.name}`;
+                } else {
+                    actionBtn.classList.remove('highlight');
+                    locText.innerText = "Exploring Park";
+                }
+            }
+
+            renderer.render(scene, camera);
+            requestAnimationFrame(animate);
+        }
+
+        // Init on load
+        window.onload = () => {
+            applyAccessibilitySettings();
+            showScreen('main-menu');
+        };
+    </script>
+</body>
+</html>
